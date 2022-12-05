@@ -210,8 +210,8 @@ def main():
             optimizer.param_groups[0]['lr'] = 1e-5
             print('Decrease decoder learning rate to 1e-5!')
     
-    visualize_train(x_epoch_data, train_loss_history, val_loss_history, 'Loss', '/content/drive/MyDrive/Sber_rail_dataset/train_loss_history.png')
-    visualize_train(x_epoch_data, train_iou_history, val_iou_history, 'IoU', '/content/drive/MyDrive/Sber_rail_dataset/train_iou_history.png')
+    visualize_train(x_epoch_data, train_loss_history, val_loss_history, 'Loss', args.save_dir + 'train_loss_history.png')
+    visualize_train(x_epoch_data, train_iou_history, val_iou_history, 'IoU',  args.save_dir + 'train_iou_history.png')
   
 if __name__ == "__main__":
 
