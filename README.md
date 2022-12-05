@@ -13,8 +13,14 @@ https://drive.google.com/file/d/1-1KhLyYrfBWBg763Q7jaAQGCyChrC5Lv/view?usp=shari
 ## Train
 
 ```
-python train.py --epochs=num_epochs --data_dir=/path_to_dataset/ --save_dir=/path_to_save_weights/
+python train.py --epochs=num_epochs --data_dir=/path_to_dataset/train_data --save_dir=/path_to_save_weights/
 ```
 p.s добавь слэш после директорий :) <br>
 /bla/bla/bla```/```
+
+## Evaluate
+
+``` 
+python evaluate.py --data_dir=/path_to_dataset/test_data --weight=/path_to_weight/
+```
 
