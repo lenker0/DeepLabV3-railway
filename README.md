@@ -3,7 +3,7 @@
 
 ```
 git clone https://github.com/lenker0/DeepLabV3-railway.git
-cd carTreck_hackaton
+cd DeepLabV3-railway
 pip install -r req.txt
 ```
 ## Dataset (preproc)
