@@ -1,115 +1,168 @@
 # -*- coding: utf-8 -*-
 import os
-import cv2
+import argparse
 import numpy as np
-import matplotlib.pyplot as plt
 import torch
-from torch.utils.data import Dataset as base
-from torchvision import transforms
-from tqdm import tqdm
+from torch.utils.data import DataLoader, random_split
+import matplotlib.pyplot as plt
+import segmentation_models_pytorch as smp
+from preprocess import main_dataset, visualize, vis_dataset
 import albumentations as album
 
-class main_dataset(base):
+def get_test_augmentation():   
+    # Add sufficient padding to ensure image is divisible by 32
+    test_transform = [
+        album.PadIfNeeded(min_height=1920, min_width=1920, always_apply=True, border_mode=0),
+    ]
+    return album.Compose(test_transform)
 
 
-    CLASSES = ['Background','Railtrack']
+def to_tensor(x, **kwargs):
+    return x.transpose(2, 0, 1).astype('float32')
 
-    def __init__(
-            self, 
-            images_dir, 
-            masks_dir, 
-            image_count,
-            classes=None, 
-            augmentation=None, 
-            preprocessing=None,
-    ):
-        self.ids = sorted(os.listdir(images_dir))
-        self.ids = self.ids[0:image_count]
-        self.mask_ids = sorted(os.listdir(masks_dir))
-        self.mask_ids = self.mask_ids[0:image_count]
-        self.images_fps = [os.path.join(images_dir, image_id) for image_id in self.ids]
-        self.masks_fps = [os.path.join(masks_dir, mask_id) for mask_id in self.mask_ids]
-        self.class_values = [self.CLASSES.index(cls) for cls in classes]
-        self.augmentation = augmentation
-        self.preprocessing = preprocessing
+
+def get_preprocessing(preprocessing_fn=None):
+    """Construct preprocessing transform    
+    Args:
+        preprocessing_fn (callable): data normalization function 
+            (can be specific for each pretrained neural network)
+    Return:
+        transform: albumentations.Compose
+    """   
+    _transform = []
+    if preprocessing_fn:
+        _transform.append(album.Lambda(image=preprocessing_fn))
+    _transform.append(album.Lambda(image=to_tensor, mask = to_tensor))
+        
+    return album.Compose(_transform)
+
+def main():
+    #start_time = time.time()
+    parser = argparse.ArgumentParser(description='Training DeepLabV3Plus models with RailSem dataset')
+
+    parser.add_argument('-n', '--net', default='DeepLabV3Plus',
+                        help='DeepLabV3Plus model for training', required=False)
     
-    def __getitem__(self, i):
-        #read data
-        image = cv2.imread(self.images_fps[i])
-        mask = cv2.imread(self.masks_fps[i],0)
-        
-        #crop and reshape
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-        masks =[(mask == v) for v in self.class_values]
-        mask = np.stack(masks,axis = -1).astype('float')
-        
-        # apply augmentations
-        if self.augmentation:
-            sample = self.augmentation(image=image, mask=mask)
-            image, mask = sample['image'], sample['mask']
-        
-        # apply preprocessing
-        if self.preprocessing:
-            sample = self.preprocessing(image=image, mask=mask)
-            image, mask = sample['image'], sample['mask']
-            
-        return image, mask
-        
-        
-    def __len__(self):
-        return len(self.ids)
-
-#######VISUAL###########
-class vis_dataset(base):
-    CLASSES = ['Background','Railtrack']
+    parser.add_argument('-e', '--epochs', type=int, default=10,
+                        help='Epoch count', required=False)
     
-    def __init__(
-            self, 
-            images_dir, 
-            masks_dir, 
-            classes=None, 
-            augmentation=None, 
-            preprocessing=None,
-    ):
-        self.ids = sorted(os.listdir(images_dir))
-        # self.ids = self.ids[0:1]
-        self.mask_ids = sorted(os.listdir(masks_dir))
-        # self.mask_ids = self.mask_ids[0:1]
-        self.images_fps = [os.path.join(images_dir, image_id) for image_id in self.ids]
-        self.masks_fps = [os.path.join(masks_dir, mask_id) for mask_id in self.mask_ids]
-        self.class_values = [self.CLASSES.index(cls) for cls in classes]
+    parser.add_argument('-i', '--image_count',type=int, default=50,
+                        help='The count of images from the dataset for testing'
+                        , required=False)
     
-    def __getitem__(self, i):
+    parser.add_argument('-c', '--use_cpu', action='store_true',
+                        help='If this option supplied, the network will be evaluated using the cpu.'
+                             ' Otherwise the gpu will be used to run evaluation.',required=False)
+    
+    parser.add_argument('-d', '--data_dir', default='/home/data1/Rs19_demo/',
+                        help='Location of the dataset.'
+                        , required=False)
+    
+    parser.add_argument('-v', '--val_split',type=float, default=0.3,
+                        help='Test Split for training and test set.'
+                        , required=False)
+    
+    parser.add_argument('-s', '--save_dir', default='./railsem_trained_weights_new_temp/',
+                        help='New weights will be saved here after training.'
+                        , required=False)
+    
+    
+    args, unknown = parser.parse_known_args()
+    print(args)
+
+
+    if (args.use_cpu):
+        DEVICE = 'cpu'
+    DEVICE = 'cuda:0'
+
+    CLASSES = ['AlternativeRailPolygon','MainRailPolygon']
+    
+    ENCODER = 'resnet101'
+    ENCODER_WEIGHTS = 'imagenet'
+    ACTIVATION = 'sigmoid'
+
+    model = smp.DeepLabV3Plus(
+        encoder_name = ENCODER,
+        encoder_weights = ENCODER_WEIGHTS,
+        activation =ACTIVATION,
+        classes =len(CLASSES),
+    )
+    
+    preprocessing_fn = smp.encoders.get_preprocessing_fn(ENCODER,ENCODER_WEIGHTS)
+
+    images_dir = os.path.join(args.data_dir,'images')
+    masks_dir = os.path.join(args.data_dir,'masks')
+    jsons_dir = os.path.join(args.data_dir,'jsons')
+    test_dataset = main_dataset(
+        images_dir, 
+        masks_dir, 
+        args.image_count,
+        augmentation = get_test_augmentation(),
+        preprocessing = get_preprocessing(preprocessing_fn),
+        classes = CLASSES
+    )
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True)#, num_workers=12)
+ 
+    
+    #loss = smp.utils.losses.CrossEntropyLoss(ignore_index=255)
+    loss = smp.utils.losses.DiceLoss()
+    metrics = [
+        smp.utils.metrics.IoU(threshold=0.5),
+        # smp.utils.metrics.Accuracy(threshold=0.5),
+    ]
+
+
+    #optimizer = torch.optim.SGD(params=model.parameters(), lr=0.001, momentum=0.9)
+    optimizer = torch.optim.Adam([
+        {'params' : model.decoder.parameters(), 'lr': 0.001},
+])
+
+    max_score = 2
+
+    best_model = torch.load('/content/drive/MyDrive/Sber_rail_dataset/DeepLabV3Plus.pth')
+
+    
+    test_epoch = smp.utils.train.ValidEpoch(
+        model = best_model, 
+        loss=loss, 
+        metrics=metrics, 
+        device=DEVICE,
+        verbose=True,
+    )
+    logs = test_epoch.run(test_loader)
+    
+
+    visual_dataset = vis_dataset(
+        images_dir, 
+        masks_dir, 
+        classes = CLASSES
+    )
+
+    for i in range(9):
+        n = np.random.choice(len(test_dataset))
         
-        #read data
-        image = cv2.imread(self.images_fps[i])
-        mask = cv2.imread(self.masks_fps[i],0)
-        #crop and reshape
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        masks =[(mask == v) for v in self.class_values]
-        mask = np.stack(masks,axis = -1).astype(np.float32)
+        image ,mask= visual_dataset[n]
+   
+        img , gt_mask= test_dataset[n]
 
-        return image, mask
+        gt_mask_railtrack=mask[:,:,0].squeeze()
+        gt_mask_railraised=mask[:,:,1].squeeze()
+
+        x_tensor = torch.from_numpy(img).to(DEVICE).unsqueeze(0)
+        pr_mask = best_model.predict(x_tensor)
+
+        pr_mask_railtrack = pr_mask.cpu().squeeze()[0,:,:].numpy().round()
+        pr_mask_railraised = pr_mask.cpu().squeeze()[1,:,:].numpy().round()
         
-    def __len__(self):
-        return len(self.ids)
+        visualize(image = image,
+        ground_truth_railtrack = gt_mask_railtrack,
+        ground_truth_railraised = gt_mask_railraised,
+        predicted_mask_railtrack = pr_mask_railtrack,
+        predicted_mask_railraised = pr_mask_railraised,
+        )
+        
+        
+     
+if __name__ == "__main__":
 
-
-def visualize(**images):
-    n = len(images)
-    plt.figure(figsize=(15,5))
-    for i, (name, image) in enumerate(images.items()):
-        plt.subplot(1, n, i + 1)
-        plt.xticks([])
-        plt.yticks([])
-        plt.title(' '.join(name.split('_')).title())
-        if name == 'predicted_mask_railtrack' or name == 'predicted_mask_railraised':
-            x_start = 0
-            x_end = 1920
-            y_start = 420
-            y_end = 1500
-            image = image[y_start:y_end,x_start:x_end]
-        plt.savefig(f'{i}.png')
-        plt.imshow(image, interpolation='nearest')
-    plt.show()
+    main()
