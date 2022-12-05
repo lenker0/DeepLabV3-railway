@@ -21,6 +21,6 @@ p.s добавь слэш после директорий :) <br>
 ## Evaluate
 
 ``` 
-python evaluate.py --data_dir=/path_to_dataset/test_data --weight=/path_to_weight/
+python evaluate.py --data_dir=/path_to_dataset/test_data --weight=/path_to_weight/DeepLabV3Plus_bestloss.pth
 ```
 
