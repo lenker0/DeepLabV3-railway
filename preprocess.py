@@ -73,9 +73,9 @@ class vis_dataset(base):
             preprocessing=None,
     ):
         self.ids = sorted(os.listdir(images_dir))
-        # self.ids = self.ids[0:1]
+        #self.ids = self.ids[0:1000]
         self.mask_ids = sorted(os.listdir(masks_dir))
-        # self.mask_ids = self.mask_ids[0:1]
+        #self.mask_ids = self.mask_ids[0:1000]
         self.images_fps = [os.path.join(images_dir, image_id) for image_id in self.ids]
         self.masks_fps = [os.path.join(masks_dir, mask_id) for mask_id in self.mask_ids]
         self.class_values = [self.CLASSES.index(cls) for cls in classes]
@@ -95,22 +95,20 @@ class vis_dataset(base):
     def __len__(self):
         return len(self.ids)
 
-
-def visualize(**images):
+def visualize(fig_num,**images):
     n = len(images)
     plt.figure(figsize=(15,5))
     for i, (name, image) in enumerate(images.items()):
         plt.subplot(1, n, i + 1)
         plt.xticks([])
-        plt.yticks([])
+        plt.yticks([])  
         plt.title(' '.join(name.split('_')).title())
-        print(name)
-        if name == 'predicted_mask_railtrack' or name == 'predicted_mask_background':
+        if name == 'predicted_mask_railtrack':
             x_start = 0
             x_end = 1920
             y_start = 420
             y_end = 1500
             image = image[y_start:y_end,x_start:x_end]
-        plt.savefig(f'{i}.png')
         plt.imshow(image, interpolation='nearest')
+    plt.savefig(f'/content/drive/MyDrive/Sber_rail_dataset/inference_1/image{fig_num}.png')
     plt.show()

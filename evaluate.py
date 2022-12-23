@@ -46,7 +46,7 @@ def main():
     parser.add_argument('-e', '--epochs', type=int, default=10,
                         help='Epoch count', required=False)
     
-    parser.add_argument('-i', '--image_count',type=int, default=50,
+    parser.add_argument('-i', '--image_count',type=int, default=1500,
                         help='The count of images from the dataset for testing'
                         , required=False)
     
@@ -54,7 +54,7 @@ def main():
                         help='If this option supplied, the network will be evaluated using the cpu.'
                              ' Otherwise the gpu will be used to run evaluation.',required=False)
     
-    parser.add_argument('-d', '--data_dir', default='/home/data1/Rs19_demo/',
+    parser.add_argument('-d', '--data_dir', default='/content/data/test_data/',
                         help='Location of the dataset.'
                         , required=False)
     
@@ -62,7 +62,7 @@ def main():
                         help='Test Split for training and test set.'
                         , required=False)
     
-    parser.add_argument('-s', '--save_dir', default='./railsem_trained_weights_new_temp/',
+    parser.add_argument('-s', '--save_dir', default='/content/drive/MyDrive/Sber_rail_dataset/inference_1',
                         help='New weights will be saved here after training.'
                         , required=False)
     
@@ -75,7 +75,7 @@ def main():
         DEVICE = 'cpu'
     DEVICE = 'cuda:0'
 
-    CLASSES = ['AlternativeRailPolygon','MainRailPolygon']
+    CLASSES = ['Background','Railtrack']
     
     ENCODER = 'resnet101'
     ENCODER_WEIGHTS = 'imagenet'
@@ -108,7 +108,7 @@ def main():
     loss = smp.utils.losses.DiceLoss()
     metrics = [
         smp.utils.metrics.IoU(threshold=0.5),
-        # smp.utils.metrics.Accuracy(threshold=0.5),
+        #smp.utils.metrics.Accuracy(threshold=0.5),
     ]
 
 
@@ -119,7 +119,7 @@ def main():
 
     max_score = 2
 
-    best_model = torch.load('/content/drive/MyDrive/Sber_rail_dataset/DeepLabV3Plus.pth')
+    best_model = torch.load('/content/weights/DeepLabV3Plus_bestloss.pth')
 
     
     test_epoch = smp.utils.train.ValidEpoch(
@@ -146,19 +146,15 @@ def main():
         img , gt_mask= test_dataset[n]
 
         gt_mask_railtrack=mask[:,:,0].squeeze()
-        gt_mask_railraised=mask[:,:,1].squeeze()
 
         x_tensor = torch.from_numpy(img).to(DEVICE).unsqueeze(0)
         pr_mask = best_model.predict(x_tensor)
 
         pr_mask_railtrack = pr_mask.cpu().squeeze()[0,:,:].numpy().round()
-        pr_mask_railraised = pr_mask.cpu().squeeze()[1,:,:].numpy().round()
         
-        visualize(image = image,
+        visualize(fig_num=i, image = image,
         ground_truth_railtrack = gt_mask_railtrack,
-        ground_truth_railraised = gt_mask_railraised,
-        predicted_mask_railtrack = pr_mask_railtrack,
-        predicted_mask_railraised = pr_mask_railraised,
+        predicted_mask_railtrack = pr_mask_railtrack
         )
         
         
